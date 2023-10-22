@@ -16,14 +16,11 @@
   languages.rust.enable = true;
 
   scripts.stockpile.exec = ''
-    ./result/bin/pokeapi-ingest-rust
+    ./result/bin/stockpile
   '';
 
   pre-commit.hooks = {
     alejandra.enable = true;
-    cargo-check.enable = true;
-    clippy.enable = true;
-    rustfmt.enable = true;
     shellcheck.enable = true;
     shfmt.enable = true;
     statix.enable = true;

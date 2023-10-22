@@ -23,6 +23,7 @@
       naersk-lib = pkgs.callPackage inputs.naersk {};
     in {
       defaultPackage = naersk-lib.buildPackage {
+        pname = "stockpile";
         src = ./.;
         buildInputs = pkgs.lib.optionals pkgs.stdenv.isDarwin (
           with pkgs.darwin.apple_sdk.frameworks; [

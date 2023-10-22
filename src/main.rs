@@ -1,13 +1,30 @@
-use reqwest;
+mod cli;
+mod fetcher;
+mod models;
 
-fn fetch_pokemon(pokemon_id: &str) -> Result<reqwest::blocking::Response, reqwest::Error> {
-    let url = format!("https://pokeapi.co/api/v2/pokemon/{}", pokemon_id);
-    let res = reqwest::blocking::get(url)?;
-    Ok(res)
-}
+use cli::args::get_args;
+use fetcher::pokemon_fetcher::{fetch_pokemon, fetch_pokemon_by_id};
+use serde_json;
 
 fn main() {
-    let pokemon = fetch_pokemon("151").unwrap().text().unwrap();
+    let matches = get_args().get_matches();
 
-    println!("{}", pokemon)
+    match matches.subcommand() {
+        Some(("fetch", sub_matches)) => {
+            let pokemon_id = sub_matches
+                .get_one::<String>("pokemon_id")
+                .expect("required");
+            let pokemon = fetch_pokemon_by_id(&pokemon_id).unwrap();
+
+            println!("{}", serde_json::to_string_pretty(&pokemon).unwrap())
+        }
+        Some(("ingest", sub_matches)) => {
+            let offset: Option<&i32> = sub_matches.get_one("offset");
+            let limit: Option<&i32> = sub_matches.get_one("limit");
+            let pokemon_data = fetch_pokemon(limit.copied(), offset.copied()).unwrap();
+
+            println!("{}", serde_json::to_string_pretty(&pokemon_data).unwrap())
+        }
+        _ => unreachable!(),
+    }
 }

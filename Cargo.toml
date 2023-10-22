@@ -3,7 +3,14 @@ name = "pokeapi-ingest-rust"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "stockpile"
+path = "src/main.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version = "0.11.22", features = ["blocking"] }
+clap = { version = "4.4.6", features = ["derive"] }
+reqwest = { version = "0.11.22", features = ["blocking", "json"] }
+serde = { version = "1.0.189", features = ["serde_derive", "derive"] }
+serde_json = "1.0.107"
