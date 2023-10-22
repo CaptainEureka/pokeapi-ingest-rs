@@ -22,33 +22,21 @@
       pkgs = import inputs.nixpkgs {inherit system;};
       naersk-lib = pkgs.callPackage inputs.naersk {};
     in {
-      defaultPackage = naersk-lib.buildPackage ./.;
+      defaultPackage = naersk-lib.buildPackage {
+        src = ./.;
+        buildInputs = pkgs.lib.optionals pkgs.stdenv.isDarwin (
+          with pkgs.darwin.apple_sdk.frameworks; [
+            CoreFoundation
+            Security
+            SystemConfiguration
+            IOKit
+          ]
+        );
+      };
       devShell = devenv.lib.mkShell {
         inherit inputs pkgs;
         modules = [
-          ({pkgs, ...}: {
-            # This is your devenv configuration
-            packages = [pkgs.hello];
-
-            enterShell = ''
-              hello
-            '';
-
-            languages.rust.enable = true;
-
-            pre-commit.hooks = {
-              alejandra.enable = true;
-              cargo-check.enable = true;
-              clippy.enable = true;
-              rustfmt.enable = true;
-              shellcheck.enable = true;
-              shfmt.enable = true;
-              statix.enable = true;
-              taplo.enable = true;
-            };
-
-            processes.run.exec = "hello";
-          })
+          (import ./devenv.nix)
         ];
       };
     });
