@@ -16,7 +16,7 @@
   languages.rust.enable = true;
 
   scripts.stockpile.exec = ''
-    ./result/bin/stockpile
+    ./result/bin/stockpile ''${@}
   '';
 
   pre-commit.hooks = {

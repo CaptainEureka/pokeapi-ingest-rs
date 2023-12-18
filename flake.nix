@@ -21,18 +21,44 @@
     inputs.utils.lib.eachDefaultSystem (system: let
       pkgs = import inputs.nixpkgs {inherit system;};
       naersk-lib = pkgs.callPackage inputs.naersk {};
+      defaultBuildInputs = pkgs.lib.optionals pkgs.stdenv.isDarwin (
+        with pkgs.darwin.apple_sdk.frameworks; [
+          CoreFoundation
+          Security
+          SystemConfiguration
+          IOKit
+        ]
+      );
+      name = "stockpile";
+      src = self;
+      rustPackage = naersk-lib.buildPackage {
+        pname = name;
+        inherit src;
+        buildInputs = defaultBuildInputs;
+      };
     in {
-      defaultPackage = naersk-lib.buildPackage {
-        pname = "stockpile";
-        src = ./.;
-        buildInputs = pkgs.lib.optionals pkgs.stdenv.isDarwin (
-          with pkgs.darwin.apple_sdk.frameworks; [
-            CoreFoundation
-            Security
-            SystemConfiguration
-            IOKit
-          ]
-        );
+      packages = {
+        default = rustPackage;
+        test = naersk-lib.buildPackage {
+          inherit name src;
+          buildInputs = defaultBuildInputs;
+          mode = "test";
+        };
+        checks = naersk-lib.buildPackage {
+          pname = name;
+          src = ./.;
+          buildInputs = defaultBuildInputs;
+          mode = "check";
+        };
+        dockerImage = pkgs.dockerTools.buildImage {
+          inherit name;
+          tag = "latest";
+          contents = [rustPackage];
+          config = {
+            Cmd = ["${rustPackage}/bin/${name}"];
+            WorkingDir = "/";
+          };
+        };
       };
       devShell = devenv.lib.mkShell {
         inherit inputs pkgs;
