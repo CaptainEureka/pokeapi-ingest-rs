@@ -1,5 +1,8 @@
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use rayon::prelude::*;
 use reqwest::{self, blocking::Response};
 use serde_json;
+use std::sync::{Arc, Mutex};
 
 use crate::models::pokemon::{PokeApiResponse, Pokemon, PokemonData};
 
@@ -47,12 +50,25 @@ pub struct PokeFetcher<T: HttpClient> {
 }
 
 const BASE_URL: &str = "http://pokeapi.co/api/v2";
+const DEFAULT_LIMIT: i32 = 50;
 
-impl<T: HttpClient> PokeFetcher<T> {
+impl<T: HttpClient + std::marker::Sync> PokeFetcher<T> {
     pub fn new(client: T) -> Self {
         Self {
             client,
             base_url: BASE_URL.to_string(),
+        }
+    }
+
+    fn get_count(&self) -> Result<i32, FetchError> {
+        let url = format!("{}/pokemon", self.base_url);
+
+        match self.fetch_pokemon_data(&url, 1, 0) {
+            Ok(res) => Ok(res.count),
+            Err(err) => {
+                println!("An error occurred fetching the total count.");
+                Err(FetchError::from(err))
+            }
         }
     }
 
@@ -61,54 +77,91 @@ impl<T: HttpClient> PokeFetcher<T> {
         limit: Option<i32>,
         offset: Option<i32>,
     ) -> Result<PokemonData, FetchError> {
-        let mut url = Some(String::from(format!("{}/pokemon", self.base_url)));
+        let url = format!("{}/pokemon", self.base_url);
 
-        let mut pokemon_data = PokemonData::new(vec![]);
+        let pokemon_data = Mutex::new(PokemonData::new(vec![]));
 
-        while let Some(next_url) = url {
-            let res = self.fetch_pokemon_data(&next_url, limit, offset)?;
+        // Fetch the initial pokemon data
+        let iter_generator = generate_limit_offset_pairs(
+            self.get_count().unwrap(),
+            limit.unwrap_or(DEFAULT_LIMIT),
+            offset,
+        );
 
-            // Iterate through PokemonListItems and fetch the pokemon
-            res.results.into_iter().for_each(|item| {
-                if let Ok(pokemon) = {
-                    let url: &str = &item.url;
-                    let res = self.client.get(url).unwrap();
+        let multi_progress = Arc::new(MultiProgress::new());
 
-                    let pokemon: Pokemon = res.json().unwrap();
-                    Ok::<Pokemon, FetchError>(pokemon)
-                } {
-                    pokemon_data.results.push(pokemon);
-                } else {
-                    println!("Failed to fetch pokemon from URL: {}", item.url);
-                }
+        iter_generator
+            .par_iter()
+            .for_each_with(multi_progress.clone(), |mp, (limit, offset)| {
+                let res = self.fetch_pokemon_data(&url, *limit, *offset).unwrap();
+
+                let progress_bar = mp.add(ProgressBar::new(res.results.len().try_into().unwrap()));
+
+                // Style the progress bar
+                progress_bar.set_style(ProgressStyle::default_bar()
+                    .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+                    .expect("Something")
+                    .progress_chars("#>-")
+                );
+
+                let pokemon_list: Vec<_> = res
+                    .results
+                    .par_iter()
+                    .filter_map(|item| {
+                        let url: &str = &item.url;
+                        let pokefetch_result = self.client.get(url).unwrap();
+                        let pokemon: Pokemon = pokefetch_result.json().unwrap();
+
+                        // Increment progress bar
+                        progress_bar.inc(1);
+
+                        Some(pokemon)
+                    })
+                    .collect();
+
+                pokemon_data.lock().unwrap().results.extend(pokemon_list);
+                progress_bar.finish_with_message("Done fetching...");
             });
-            url = res.next;
-        }
 
-        Ok(pokemon_data)
+        multi_progress.clear().unwrap();
+
+        Ok(pokemon_data.into_inner().unwrap())
     }
 
     fn fetch_pokemon_data(
         &self,
         url: &str,
-        limit: Option<i32>,
-        offset: Option<i32>,
+        limit: i32,
+        offset: i32,
     ) -> Result<PokeApiResponse, reqwest::Error> {
-        let mut url = reqwest::Url::parse(&url).unwrap();
+        let mut url = reqwest::Url::parse(url).unwrap();
         {
             let mut query_pairs = url.query_pairs_mut();
-            if let Some(limit) = limit {
-                query_pairs.append_pair("limit", &limit.to_string());
-            }
-            if let Some(offset) = offset {
-                query_pairs.append_pair("offset", &offset.to_string());
-            }
+            query_pairs.append_pair("limit", &limit.to_string());
+            query_pairs.append_pair("offset", &offset.to_string());
         }
-        let res = self.client.get(&url.to_string()).unwrap();
+        let res = self.client.get(url.as_ref()).unwrap();
 
         let pokemon_res: PokeApiResponse = res.json()?;
         Ok(pokemon_res)
     }
+}
+
+pub fn generate_limit_offset_pairs(
+    total_count: i32,
+    limit: i32,
+    initial_offset: Option<i32>,
+) -> Vec<(i32, i32)> {
+    let mut pairs = Vec::new();
+
+    let mut offset = initial_offset.unwrap_or(0);
+
+    while offset < total_count {
+        pairs.push((limit, offset));
+        offset += limit;
+    }
+
+    pairs
 }
 
 pub fn fetch_pokemon_by_id<T: HttpClient>(
