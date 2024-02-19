@@ -4,6 +4,8 @@
     [
       pkgs.gum
       pkgs.alejandra
+      pkgs.openssl
+      pkgs.pkg-config
     ]
     ++ pkgs.lib.optionals pkgs.stdenv.isDarwin (
       with pkgs.darwin.apple_sdk; [
