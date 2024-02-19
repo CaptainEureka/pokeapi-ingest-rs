@@ -3,6 +3,7 @@
   packages =
     [
       pkgs.gum
+      pkgs.alejandra
     ]
     ++ pkgs.lib.optionals pkgs.stdenv.isDarwin (
       with pkgs.darwin.apple_sdk; [
