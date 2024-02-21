@@ -3,8 +3,8 @@ mod fetcher;
 mod models;
 
 use clap::Parser;
-use fetcher::pokemon_fetcher::Fetchable;
-use fetcher::pokemon_fetcher::PokeFetcher;
+use fetcher::pokemon_fetcher::{FetchAllPokemon, PokeFetcher};
+use fetcher::pokemon_fetcher::{FetchPokemon, NewFetch};
 
 use cli::args::{Cli, Commands};
 use reqwest::blocking::Client;
@@ -34,9 +34,9 @@ fn fetch_pokemon(client: Client, pokemon_id: &str) {
     }
 }
 
-fn ingest_pokemon_data(client: Client, limit: i32, offset: i32, file_path: &str) {
+fn ingest_pokemon_data(client: Client, _limit: i32, _offset: i32, file_path: &str) {
     let fetcher = PokeFetcher::new(client);
-    match fetcher.fetch(limit, offset) {
+    match fetcher.fetch_from_all() {
         Ok(data) => match data.write_json(file_path) {
             Ok(_) => println!("Data written to {}", file_path),
             Err(err) => eprintln!("Error writing to file: {}", err),

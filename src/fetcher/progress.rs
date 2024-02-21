@@ -1,5 +1,7 @@
 use indicatif::{ProgressBar, ProgressStyle};
 
+pub const DEFAULT_PROGRESS_STYLE: &str =
+    "{spinner:.green} [{elapsed_precise}] [{bar:100.cyan/blue}] {pos}/{len} ({eta})";
 pub struct ProgressBarHandler {
     pub progress_bar: ProgressBar,
 }
@@ -11,11 +13,9 @@ impl ProgressBarHandler {
         // Style the progress bar
         progress_bar.set_style(
             ProgressStyle::default_bar()
-                .template(
-                    "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
-                )
+                .template(DEFAULT_PROGRESS_STYLE)
                 .expect("Unable to create progress bar")
-                .progress_chars("#>-"),
+                .progress_chars("=>-"),
         );
 
         Self { progress_bar }
