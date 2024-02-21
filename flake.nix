@@ -40,6 +40,7 @@
         pname = name;
         inherit src;
         buildInputs = defaultBuildInputs;
+        release = true;
       };
     in {
       packages = {
