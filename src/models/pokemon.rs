@@ -71,7 +71,7 @@ impl PokemonData {
         let file = File::create(fp)?;
 
         // Write using serde
-        serde_json::to_writer(&file, &self)?;
+        serde_json::to_writer_pretty(&file, &self)?;
 
         Ok(())
     }
