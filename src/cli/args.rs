@@ -1,42 +1,59 @@
-use clap::{Arg, Command};
+use clap::{Parser, Subcommand};
 
-pub fn get_args() -> Command {
-    let matches = Command::new("Stockpile CLI - Pokemon Fetcher")
-        .bin_name("stockpile")
-        .version("0.1.0")
-        .author("Your Name <youremail@example.com>")
-        .about("Fetches Pokemon data from the PokeAPI")
-        .subcommand_required(true)
-        .subcommand(
-            Command::new("fetch").about("Fetches a Pokemon by ID").arg(
-                Arg::new("pokemon_id")
-                    .short('p')
-                    .long("pokemon-id")
-                    .help("ID of the pokemon to fetch"),
-            ),
-        )
-        .subcommand(
-            Command::new("ingest")
-                .about("Ingests all Pokemon from PokeAPI")
-                .arg(
-                    Arg::new("limit")
-                        .long("limit")
-                        .short('l')
-                        .default_value("200")
-                        .value_parser(clap::value_parser!(i32).range(0..201))
-                        .action(clap::ArgAction::Set)
-                        .help("Pagination limit to use for PokeAPI."),
-                )
-                .arg(
-                    Arg::new("offset")
-                        .long("offset")
-                        .short('o')
-                        .default_value("0")
-                        .value_parser(clap::value_parser!(i32).range(0..201))
-                        .action(clap::ArgAction::Set)
-                        .help("Pagination offset to use for PokeAPI."),
-                ),
-        );
+#[derive(Debug, Parser)]
+#[command(version, long_about = None, subcommand_required = true)]
+#[command(name = "stockpile", about = "Fetches Pokemon data from the PokeAPI")]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Commands,
+}
 
-    return matches;
+#[derive(Debug, Subcommand)]
+pub enum Commands {
+    #[command(arg_required_else_help = true, about = "Fetches a Pokemon by ID")]
+    Fetch {
+        #[arg(short, long, help = "ID of the pokemon to fetch")]
+        pokemon_id: String,
+    },
+    #[command(about = "Ingests all Pokemon from PokeAPI")]
+    Ingest {
+        #[arg(
+            long,
+            short,
+            default_value = "false",
+            exclusive = true,
+            required = false,
+            help = "Fetch all Pokemon from PokeAPI."
+        )]
+        all: bool,
+        #[arg(
+            long,
+            short,
+            default_value = "200",
+            required = false,
+            help = "Pagination limit to use for PokeAPI."
+        )]
+        /// The limit for the number of items to in a page from PokeAPI.
+        /// It should be a positive integer.
+        limit: i32,
+        #[arg(
+            long,
+            short,
+            default_value = "0",
+            required = false,
+            help = "Pagination offset to use for PokeAPI."
+        )]
+        /// The offset value for retrieving data from the PokeAPI.
+        /// This value determines the starting point of the data to be retrieved.
+        offset: i32,
+        #[arg(
+            long,
+            short,
+            default_value = "pokemon_data.json",
+            required = false,
+            help = "File output path."
+        )]
+        /// The file path of the input file.
+        file_path: String,
+    },
 }
