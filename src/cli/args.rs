@@ -15,15 +15,13 @@ pub enum Commands {
         #[arg(short, long, help = "ID of the pokemon to fetch")]
         pokemon_id: String,
     },
-    #[command(
-        arg_required_else_help = true,
-        about = "Ingests all Pokemon from PokeAPI"
-    )]
+    #[command(about = "Ingests all Pokemon from PokeAPI")]
     Ingest {
         #[arg(
             long,
             short,
             default_value = "200",
+            required = false,
             help = "Pagination limit to use for PokeAPI."
         )]
         /// The limit for the number of items to in a page from PokeAPI.
@@ -33,6 +31,7 @@ pub enum Commands {
             long,
             short,
             default_value = "0",
+            required = false,
             help = "Pagination offset to use for PokeAPI."
         )]
         /// The offset value for retrieving data from the PokeAPI.
@@ -42,6 +41,7 @@ pub enum Commands {
             long,
             short,
             default_value = "pokemon_data.json",
+            required = false,
             help = "File output path."
         )]
         /// The file path of the input file.
