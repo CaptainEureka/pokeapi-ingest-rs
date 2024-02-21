@@ -1,6 +1,13 @@
 use std::{error::Error, fs::File};
 
+use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
+
+use crate::fetcher::errors::FetchError;
+
+pub trait Followable<T, E> {
+    fn follow(&self, client: &Client) -> Result<T, E>;
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PokemonId(i32);
@@ -46,6 +53,16 @@ pub struct PokemonType {
 pub struct PokemonListItem {
     pub name: String,
     pub url: String,
+}
+
+impl Followable<Pokemon, FetchError> for PokemonListItem {
+    fn follow(&self, client: &Client) -> Result<Pokemon, FetchError> {
+        client
+            .get(&self.url)
+            .send()?
+            .json::<Pokemon>()
+            .map_err(FetchError::from)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]

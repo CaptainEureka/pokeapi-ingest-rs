@@ -3,8 +3,7 @@ mod fetcher;
 mod models;
 
 use clap::Parser;
-use fetcher::pokemon_fetcher::{FetchAllPokemon, PokeFetcher};
-use fetcher::pokemon_fetcher::{FetchPokemon, NewFetch};
+use fetcher::pokemon_fetcher::{FetchPokemon, PokeFetcher};
 
 use cli::args::{Cli, Commands};
 use reqwest::blocking::Client;
@@ -15,7 +14,15 @@ fn main() {
 
     match cli.command {
         Commands::Fetch { pokemon_id } => fetch_pokemon(client, &pokemon_id),
+        // TODO: Implement the Ingest command as Enum?
         Commands::Ingest {
+            all,
+            limit: _,
+            offset: _,
+            file_path,
+        } if all => ingest_all_pokemon_data(client, &file_path),
+        Commands::Ingest {
+            all: _,
             limit,
             offset,
             file_path,
@@ -34,9 +41,20 @@ fn fetch_pokemon(client: Client, pokemon_id: &str) {
     }
 }
 
-fn ingest_pokemon_data(client: Client, _limit: i32, _offset: i32, file_path: &str) {
+fn ingest_pokemon_data(client: Client, limit: i32, offset: i32, file_path: &str) {
     let fetcher = PokeFetcher::new(client);
-    match fetcher.fetch_from_all() {
+    match fetcher.fetch_with_limit_and_offset(&limit, &offset) {
+        Ok(data) => match data.write_json(file_path) {
+            Ok(_) => println!("Data written to {}", file_path),
+            Err(err) => eprintln!("Error writing to file: {}", err),
+        },
+        Err(err) => eprintln!("Error fetching PokemonData: {}", err),
+    }
+}
+
+fn ingest_all_pokemon_data(client: Client, file_path: &str) {
+    let fetcher = PokeFetcher::new(client);
+    match fetcher.fetch_all() {
         Ok(data) => match data.write_json(file_path) {
             Ok(_) => println!("Data written to {}", file_path),
             Err(err) => eprintln!("Error writing to file: {}", err),

@@ -20,6 +20,15 @@ pub enum Commands {
         #[arg(
             long,
             short,
+            default_value = "false",
+            exclusive = true,
+            required = false,
+            help = "Fetch all Pokemon from PokeAPI."
+        )]
+        all: bool,
+        #[arg(
+            long,
+            short,
             default_value = "200",
             required = false,
             help = "Pagination limit to use for PokeAPI."
