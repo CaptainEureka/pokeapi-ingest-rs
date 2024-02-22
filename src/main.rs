@@ -45,7 +45,14 @@ async fn fetch_pokemon(client: Client, pokemon_id: &str) {
 
 async fn ingest_pokemon_data(client: Client, limit: i32, offset: i32, file_path: &str) {
     let fetcher = PokeFetcher::new(client);
-    match fetcher.fetch_with_limit_and_offset(&limit, &offset).await {
+
+    let buffer_size: usize = std::env::var("BUFFER_SIZE")
+        .map_or(50, |buffer_size_str| buffer_size_str.parse().unwrap_or(50));
+
+    match fetcher
+        .fetch_with_limit_and_offset(&limit, &offset, buffer_size)
+        .await
+    {
         Ok(data) => match data.write_json(file_path) {
             Ok(_) => println!("Data written to {}", file_path),
             Err(err) => eprintln!("Error writing to file: {}", err),

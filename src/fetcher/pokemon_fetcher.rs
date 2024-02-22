@@ -1,5 +1,4 @@
 use futures::stream::{self, StreamExt};
-use indicatif::ProgressIterator;
 use indicatif::ProgressStyle;
 use reqwest::Client;
 
@@ -8,6 +7,10 @@ use crate::{
     fetcher::errors::FetchError,
     models::pokemon::{PokeApiResponse, Pokemon, PokemonData, PokemonListItem},
 };
+
+const FETCH_ALL_LIMIT: i32 = 10000;
+const FETCH_ALL_OFFSET: i32 = 0;
+const FETCH_ALL_BUFFER_SIZE: usize = 50;
 
 pub struct PokeFetcher {
     client: Client,
@@ -46,6 +49,7 @@ pub trait FetchPokemon {
         &self,
         limit: &i32,
         offset: &i32,
+        buffer_size: usize,
     ) -> Result<PokemonData, FetchError>;
 }
 
@@ -78,6 +82,7 @@ impl FetchPokemon for PokeFetcher {
         &self,
         limit: &i32,
         offset: &i32,
+        buffer_size: usize,
     ) -> Result<PokemonData, FetchError> {
         let pokemon_list = self.fetch(limit, offset).await?;
 
@@ -87,17 +92,19 @@ impl FetchPokemon for PokeFetcher {
             .with_style(self.create_default_progress_style());
 
         let result = stream::iter(pokemon_list)
-            .filter_map(|item| {
-                pb.inc(1);
-                async move {
-                    match item.follow(&self.client).await {
-                        Ok(pokemon) => Some(pokemon),
-                        Err(err) => {
-                            eprintln!("Error fetching pokemon: {}", err);
-                            None
-                        }
+            .map(|item| async move {
+                match item.follow(&self.client).await {
+                    Ok(pokemon) => Ok(pokemon),
+                    Err(err) => {
+                        eprintln!("Error fetching pokemon: {}", err);
+                        Err(err)
                     }
                 }
+            })
+            .buffer_unordered(buffer_size)
+            .filter_map(|result| {
+                pb.inc(1);
+                async move { result.ok() }
             })
             .collect::<Vec<Pokemon>>()
             .await;
@@ -108,6 +115,7 @@ impl FetchPokemon for PokeFetcher {
     }
 
     async fn fetch_all(&self) -> Result<PokemonData, FetchError> {
-        self.fetch_with_limit_and_offset(&10000, &0).await
+        self.fetch_with_limit_and_offset(&FETCH_ALL_LIMIT, &FETCH_ALL_OFFSET, FETCH_ALL_BUFFER_SIZE)
+            .await
     }
 }
