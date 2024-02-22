@@ -6,33 +6,35 @@ use clap::Parser;
 use fetcher::pokemon_fetcher::{FetchPokemon, PokeFetcher};
 
 use cli::args::{Cli, Commands};
-use reqwest::blocking::Client;
+use reqwest::Client;
+use tokio;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = Cli::parse();
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::Client::new();
 
     match cli.command {
-        Commands::Fetch { pokemon_id } => fetch_pokemon(client, &pokemon_id),
+        Commands::Fetch { pokemon_id } => fetch_pokemon(client, &pokemon_id).await,
         // TODO: Implement the Ingest command as Enum?
         Commands::Ingest {
             all,
             limit: _,
             offset: _,
             file_path,
-        } if all => ingest_all_pokemon_data(client, &file_path),
+        } if all => ingest_all_pokemon_data(client, &file_path).await,
         Commands::Ingest {
             all: _,
             limit,
             offset,
             file_path,
-        } => ingest_pokemon_data(client, limit, offset, &file_path),
+        } => ingest_pokemon_data(client, limit, offset, &file_path).await,
     }
 }
 
-fn fetch_pokemon(client: Client, pokemon_id: &str) {
+async fn fetch_pokemon(client: Client, pokemon_id: &str) {
     let fetcher = PokeFetcher::new(client);
-    match fetcher.fetch_pokemon_by_id(pokemon_id) {
+    match fetcher.fetch_pokemon_by_id(pokemon_id).await {
         Ok(pokemon) => match serde_json::to_string_pretty(&pokemon) {
             Ok(json) => println!("{}", json),
             Err(err) => eprintln!("Error serializing Pokemon: {}", err),
@@ -41,9 +43,9 @@ fn fetch_pokemon(client: Client, pokemon_id: &str) {
     }
 }
 
-fn ingest_pokemon_data(client: Client, limit: i32, offset: i32, file_path: &str) {
+async fn ingest_pokemon_data(client: Client, limit: i32, offset: i32, file_path: &str) {
     let fetcher = PokeFetcher::new(client);
-    match fetcher.fetch_with_limit_and_offset(&limit, &offset) {
+    match fetcher.fetch_with_limit_and_offset(&limit, &offset).await {
         Ok(data) => match data.write_json(file_path) {
             Ok(_) => println!("Data written to {}", file_path),
             Err(err) => eprintln!("Error writing to file: {}", err),
@@ -52,9 +54,9 @@ fn ingest_pokemon_data(client: Client, limit: i32, offset: i32, file_path: &str)
     }
 }
 
-fn ingest_all_pokemon_data(client: Client, file_path: &str) {
+async fn ingest_all_pokemon_data(client: Client, file_path: &str) {
     let fetcher = PokeFetcher::new(client);
-    match fetcher.fetch_all() {
+    match fetcher.fetch_all().await {
         Ok(data) => match data.write_json(file_path) {
             Ok(_) => println!("Data written to {}", file_path),
             Err(err) => eprintln!("Error writing to file: {}", err),
