@@ -1,7 +1,6 @@
-use indicatif::ParallelProgressIterator;
+use futures::stream::{self, StreamExt};
 use indicatif::ProgressStyle;
-use rayon::prelude::*;
-use reqwest::{self, blocking::Client};
+use reqwest::Client;
 
 use crate::models::pokemon::Followable;
 use crate::{
@@ -9,14 +8,18 @@ use crate::{
     models::pokemon::{PokeApiResponse, Pokemon, PokemonData, PokemonListItem},
 };
 
+const FETCH_ALL_LIMIT: i32 = 10000;
+const FETCH_ALL_OFFSET: i32 = 0;
+const FETCH_ALL_BUFFER_SIZE: usize = 50;
+
 pub struct PokeFetcher {
     client: Client,
     base_url: String,
 }
 
 impl PokeFetcher {
-    const BASE_URL: &str = "http://pokeapi.co/api/v2";
-    const DEFAULT_PROGRESS_STYLE: &str =
+    const BASE_URL: &'static str = "http://pokeapi.co/api/v2";
+    const DEFAULT_PROGRESS_STYLE: &'static str =
         "{spinner:.green} [{elapsed_precise}] [{bar:100.cyan/blue}] {pos}/{len} ({eta})";
 
     pub fn new(client: Client) -> Self {
@@ -39,56 +42,80 @@ impl PokeFetcher {
 }
 
 pub trait FetchPokemon {
-    fn fetch_pokemon_by_id(&self, pokemon_id: &str) -> Result<Pokemon, FetchError>;
-    fn fetch(&self, limit: &i32, offset: &i32) -> Result<Vec<PokemonListItem>, FetchError>;
-    fn fetch_all(&self) -> Result<PokemonData, FetchError>;
-    fn fetch_with_limit_and_offset(
+    async fn fetch_pokemon_by_id(&self, pokemon_id: &str) -> Result<Pokemon, FetchError>;
+    async fn fetch(&self, limit: &i32, offset: &i32) -> Result<Vec<PokemonListItem>, FetchError>;
+    async fn fetch_all(&self) -> Result<PokemonData, FetchError>;
+    async fn fetch_with_limit_and_offset(
         &self,
         limit: &i32,
         offset: &i32,
+        buffer_size: usize,
     ) -> Result<PokemonData, FetchError>;
 }
 
 impl FetchPokemon for PokeFetcher {
-    fn fetch_pokemon_by_id(&self, pokemon_id: &str) -> Result<Pokemon, FetchError> {
+    async fn fetch_pokemon_by_id(&self, pokemon_id: &str) -> Result<Pokemon, FetchError> {
         self.client
             .get(format!("{}/pokemon/{}", self.base_url, pokemon_id))
-            .send()?
+            .send()
+            .await?
             .json()
+            .await
             .map_err(FetchError::from)
     }
 
-    fn fetch(&self, limit: &i32, offset: &i32) -> Result<Vec<PokemonListItem>, FetchError> {
+    async fn fetch(&self, limit: &i32, offset: &i32) -> Result<Vec<PokemonListItem>, FetchError> {
         let url: String = format!("{}/pokemon", self.base_url);
         let data = self
             .client
             .get(&url)
             .query(&[("limit", limit), ("offset", offset)])
-            .send()?
-            .json::<PokeApiResponse>()?;
+            .send()
+            .await?
+            .json::<PokeApiResponse>()
+            .await?;
 
         Ok(data.results)
     }
 
-    fn fetch_with_limit_and_offset(
+    async fn fetch_with_limit_and_offset(
         &self,
         limit: &i32,
         offset: &i32,
+        buffer_size: usize,
     ) -> Result<PokemonData, FetchError> {
-        let pokemon_list = self.fetch(limit, offset)?;
+        let pokemon_list = self.fetch(limit, offset).await?;
 
         println!("Fetching {} pokemon", pokemon_list.len());
 
-        let result = pokemon_list
-            .par_iter()
-            .progress_with_style(self.create_default_progress_style())
-            .filter_map(|item| item.follow(&self.client).ok())
-            .collect::<Vec<Pokemon>>();
+        let pb = indicatif::ProgressBar::new(pokemon_list.len() as u64)
+            .with_style(self.create_default_progress_style());
+
+        let result = stream::iter(pokemon_list)
+            .map(|item| async move {
+                match item.follow(&self.client).await {
+                    Ok(pokemon) => Ok(pokemon),
+                    Err(err) => {
+                        eprintln!("Error fetching pokemon: {}", err);
+                        Err(err)
+                    }
+                }
+            })
+            .buffer_unordered(buffer_size)
+            .filter_map(|result| {
+                pb.inc(1);
+                async move { result.ok() }
+            })
+            .collect::<Vec<Pokemon>>()
+            .await;
+
+        pb.finish_with_message(format!("Fetched {} pokemon", result.len()));
 
         Ok(PokemonData::new(result))
     }
 
-    fn fetch_all(&self) -> Result<PokemonData, FetchError> {
-        self.fetch_with_limit_and_offset(&10000, &0)
+    async fn fetch_all(&self) -> Result<PokemonData, FetchError> {
+        self.fetch_with_limit_and_offset(&FETCH_ALL_LIMIT, &FETCH_ALL_OFFSET, FETCH_ALL_BUFFER_SIZE)
+            .await
     }
 }
